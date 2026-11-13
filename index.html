@@ -1,0 +1,64 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex">
+<meta name="referrer" content="no-referrer">
+<title>Avatar Remote</title>
+<style>
+  :root { --bg:#12151b; --card:#1b2029; --line:#2a313d; --text:#e8ecf2; --dim:#8b96a8; --accent:#34b6cc; }
+  * { box-sizing:border-box; }
+  body { margin:0; min-height:100vh; display:grid; place-items:center; background:var(--bg); color:var(--text); font:16px/1.45 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif; }
+  main { width:min(420px, calc(100vw - 32px)); background:var(--card); border:1px solid var(--line); border-radius:16px; padding:22px 20px; text-align:center; }
+  h1 { font-size:20px; margin:0 0 8px; }
+  p { color:var(--dim); margin:8px 0 0; }
+  .spin { width:26px; height:26px; margin:14px auto 4px; border:3px solid var(--line); border-top-color:var(--accent); border-radius:50%; animation:s 0.9s linear infinite; }
+  @keyframes s { to { transform:rotate(360deg); } }
+  button { margin-top:14px; font:inherit; color:#06222a; background:var(--accent); border:0; border-radius:10px; padding:8px 16px; font-weight:600; cursor:pointer; }
+</style>
+</head>
+<body>
+<main>
+  <h1 id="h">Avatar Remote</h1>
+  <div class="spin" id="spin"></div>
+  <p id="msg">Finding the remote…</p>
+  <button id="retry" hidden>Try again</button>
+</main>
+<script>
+// Forwarder: this page never changes. link.json in the same repo holds the remote's current address (the PC rewrites
+// it every time the tunnel starts). The access code after "#" stays in the browser: it is never sent to GitHub.
+(() => {
+  const code = decodeURIComponent(location.hash.slice(1)).trim();
+  const $ = (id) => document.getElementById(id);
+  const say = (h, m, retry) => { $("h").textContent = h; $("msg").textContent = m; $("spin").hidden = !!retry || retry === null; $("retry").hidden = !retry; };
+  $("retry").onclick = () => location.reload();
+  if (!/^[A-Za-z0-9_-]{6,64}$/.test(code)) { say("Avatar Remote", "This link is missing its access code. Ask for the full link (it ends with # and a code).", null); return; }
+
+  // Owner and repo from this page's own address (<owner>.github.io/<repo>/), so the page works in any repo.
+  const owner = location.hostname.endsWith(".github.io") ? location.hostname.split(".")[0] : null;
+  const repo = location.pathname.split("/").filter(Boolean)[0] || null;
+  const fresh = owner && repo ? "https://api.github.com/repos/" + owner + "/" + repo + "/contents/link.json?ref=main&t=" + Date.now() : null;
+
+  async function where() {
+    if (fresh) {       // the GitHub API is up to date at once; the Pages copy of link.json can lag a few minutes
+      try {
+        const r = await fetch(fresh, { headers: { Accept: "application/vnd.github.raw+json" }, cache: "no-store", referrerPolicy: "no-referrer" });
+        if (r.ok) return await r.json();
+      } catch {}
+    }
+    const r = await fetch("link.json?t=" + Date.now(), { cache: "no-store" });
+    if (!r.ok) throw new Error("no link.json");
+    return r.json();
+  }
+  where().then((l) => {
+    if (!l || !l.online || !/^https:\/\/[a-z0-9-]+\.trycloudflare\.com$/.test(l.base || "")) {
+      say("Not live right now", "The remote is offline. Try again when the stream or event is on.", true); return;
+    }
+    say("Avatar Remote", "Opening…");
+    location.replace(l.base + "/s/" + encodeURIComponent(code));
+  }).catch(() => say("Can't reach the remote", "Check your connection and try again.", true));
+})();
+</script>
+</body>
+</html>
