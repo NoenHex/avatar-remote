@@ -55,9 +55,17 @@
     if (!l || !l.online || !/^https:\/\/[a-z0-9-]+\.trycloudflare\.com$/.test(l.base || "")) {
       say("Not live right now", "The remote is offline. Try again when the stream or event is on.", true); return;
     }
-    say("Avatar Remote", "Opening…");
-    location.replace(l.base + "/s/" + encodeURIComponent(code));
-  }).catch(() => say("Can't reach the remote", "Check your connection and try again.", true));
+    // link.json can be stale (the PC was shut down without the remote saying it went offline): check the tunnel answers
+    // before forwarding, so a dead address shows "offline" here instead of a browser error page. A no-cors request
+    // resolves (opaquely) when the host is up and rejects when its name no longer exists.
+    say("Avatar Remote", "Connecting…");
+    const target = l.base + "/s/" + encodeURIComponent(code);
+    const ping = fetch(target, { mode: "no-cors", cache: "no-store", referrerPolicy: "no-referrer" });
+    const timeout = new Promise((_, no) => setTimeout(() => no(new Error("timeout")), 8000));
+    return Promise.race([ping, timeout]).then(
+      () => location.replace(target),
+      () => say("Not live right now", "The remote stopped without saying so. Try again when the stream or event is on.", true));
+  }).catch(() => say("Couldn't load the remote's address", "GitHub didn't answer just now. Try again in a moment.", true));
 })();
 </script>
 </body>
